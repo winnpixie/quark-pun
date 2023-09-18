@@ -12,7 +12,7 @@ public class Program {
 
         try {
             DatagramSocket udpSock = new DatagramSocket(5055);
-            byte[] buffer = new byte[8192];
+            byte[] buffer = new byte[1200];
             DatagramPacket incomingPacket = new DatagramPacket(buffer, buffer.length);
 
             while (RUNNING) {
@@ -58,25 +58,32 @@ public class Program {
                     dos.writeInt(challenge); // Challenge
 
                     // TYPES
-                    // 3 = Connect?
+                    // 1 = ACK
+                    // 3 = Connect
                     // 4 = Disconnect
+                    // 6 = Generic?
+                    // 7 = Generic (Unreliable)?
+                    // 8 = Generic (Fragmented)
 
                     // RESERVED
                     // Disconnect
                     //  1 == Server Logic
                     //  3 == Server Full
 
-                    // Payload
-
                     // COMMAND
-                    dos.writeByte(4); // Command Id
+                    dos.writeByte(6); // Command Id
                     dos.writeByte(0); // Channel Id
                     dos.writeByte(0); // Flags
-                    dos.writeByte(3); // Reserved
-                    dos.writeInt(2); // Size
+                    dos.writeByte(0); // Reserved
+                    dos.writeInt(14); // Size
                     dos.writeInt(0); // Reliable Seq Num
 
+                    // T3
                     // dos.writeShort(42);
+
+                    // T6
+                    dos.writeByte(243);
+                    dos.writeByte(1);
 
                     dos.flush();
                 }
