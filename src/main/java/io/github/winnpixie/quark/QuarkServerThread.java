@@ -1,6 +1,8 @@
 package io.github.winnpixie.quark;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 
@@ -25,75 +27,64 @@ public class QuarkServerThread extends Thread {
     }
 
     private void runTest(DatagramSocket srvSock) throws IOException {
-        byte[] buffer = new byte[2048];
+        byte[] buffer = new byte[1200];
         DatagramPacket inPacket = new DatagramPacket(buffer, buffer.length);
         srvSock.receive(inPacket);
 
         byte[] inPayload = inPacket.getData();
         int inLen = inPacket.getLength();
 
-        int time;
-        int challenge;
-        try (DataInputStream dis = new DataInputStream(new ByteArrayInputStream(inPayload, 0, inLen))) {
-            short peerId = dis.readShort();
-            System.out.printf("PEER_ID: %d%n", peerId);
+        System.out.printf("recv from %s (%d byte(s) total)%n", inPacket.getAddress().getHostName(), inLen);
 
-            byte crc = dis.readByte();
-            System.out.printf("CRC: %d%n", crc);
+        QuarkCommand commandIn = new QuarkCommand(inPayload, inLen);
+        System.out.println("== Packet Data ==");
+        System.out.printf("Peer Id: %d%n", commandIn.peerId);
+        System.out.printf("CRC: %d%n", commandIn.crcEnabled ? 204 : 0);
+        System.out.printf("Cmd Count: %d%n", commandIn.commandCount);
+        System.out.printf("Time: %d%n", commandIn.time);
+        System.out.printf("Challenge: %d%n", commandIn.challenge);
 
-            byte cmdCount = dis.readByte();
-            System.out.printf("CMD_C: %d%n", cmdCount);
+        System.out.println("== Command Data ==");
+        System.out.printf("Type: %d%n", commandIn.type);
+        System.out.printf("Channel: %d%n", commandIn.channel);
+        System.out.printf("Flags: %d%n", commandIn.flags);
+        System.out.printf("Reserved: %d%n", commandIn.reserved);
+        System.out.printf("Size: %d%n", commandIn.size);
+        System.out.printf("Reliable Sequence Number: %d%n", commandIn.reliableSeqNum);
 
-            time = dis.readInt();
-            System.out.printf("TIME: %d%n", time);
-
-            challenge = dis.readInt();
-            System.out.printf("CHALLENGE: %d%n", challenge);
+        System.out.printf("Payload (%d byte(s)%n", commandIn.payload.length);
+        for (int i = 0; i < commandIn.payload.length; i++) {
+            System.out.printf("%02X, ", commandIn.payload[i]);
         }
-
-        System.out.printf("Payload (%d bytes)%n", inLen);
-        for (int i = 0; i < inLen; i++) {
-            System.out.printf("%02X, ", inPayload[i]);
-        }
-
-        System.out.printf("%nrecv from %s%n", inPacket.getAddress().getHostAddress());
+        System.out.println();
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (DataOutputStream dos = new DataOutputStream(baos)) {
-            // PACKET HEADER
-            dos.writeShort(1); // ???
-            dos.writeByte(0); // CRC
-            dos.writeByte(1); // Command Count
-            dos.writeInt(time); // Time
-            dos.writeInt(challenge); // Challenge
+            QuarkCommand commandOut = new QuarkCommand();
+            commandOut.peerId = commandIn.peerId;
+            commandOut.time = commandIn.time;
+            commandOut.challenge = commandIn.challenge;
 
-            // Commands
-            // 1 = ACK
-            // 3 = Connect
-            // 4 = Disconnect
-            // 6 = Generic?
-            // 7 = Generic (Unreliable)?
-            // 8 = Generic (Fragmented)
+            // TODO: Figure out base communication to reach a "Connected" state.
+            if (commandIn.peerId == -1) {
+                commandOut.type = 3;
+                commandOut.writeTo(dos);
 
-            // RESERVED
-            // Disconnect
-            //  1 == Server Logic
-            //  3 == Server Full
+                dos.writeShort(42);
+            } else if (commandIn.type != 1) {
+                commandOut.type = 6;
 
-            // COMMAND
-            dos.writeByte(4); // Command Id
-            dos.writeByte(0); // Channel Id
-            dos.writeByte(0); // Flags
-            dos.writeByte(3); // Reserved
-            dos.writeInt(14); // Size
-            dos.writeInt(0); // Reliable Seq Num
-
-            // Type 3
-            // dos.writeShort(42);
-
-            // Type 6
-            dos.writeByte(243);
-            dos.writeByte(1);
+                commandOut.payload = new byte[]{
+                        (byte) 243,
+                        (byte) 1
+                };
+                commandOut.writeTo(dos);
+            } else {
+                // For now, just disconnect the client with reason ServerLogic.
+                commandOut.type = 4;
+                commandOut.reserved = 1;
+                commandOut.writeTo(dos);
+            }
 
             dos.flush();
         }
