@@ -6,7 +6,7 @@
 
     <groupId>io.github.winnpixie</groupId>
     <artifactId>quark</artifactId>
-    <version>0.0.1-BETA</version>
+    <version>0.0.1-dev</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
